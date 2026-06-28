@@ -15,6 +15,7 @@ from mastodon import (
     get_own_account_id,
     get_latest_statuses,
 )
+from bluesky import post_to_bluesky
 
 import json
 import os
