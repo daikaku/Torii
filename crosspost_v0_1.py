@@ -203,7 +203,6 @@ def post_to_bluesky(
     client: Client,
     text: str,
     media: list[dict[str, Any]],
-    url: str | None = None,
     metadata: dict[str, str] | None = None,
 ) -> None:
     """Post a status with up to four images to Bluesky."""
@@ -324,9 +323,8 @@ def main() -> None:
 
         print(f"Posting to Bluesky: {text}")
         media = status.get("media_attachments", [])
-        has_video = is_video(media)
-        
-        post_to_bluesky(client, text, media, url, metadata)
+
+        post_to_bluesky(client, text, media, metadata)
         state["posted_ids"].append(status_id)
         save_state(state)
 
