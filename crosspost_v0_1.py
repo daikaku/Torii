@@ -1,3 +1,6 @@
+from config import load_config
+from state import load_state, save_state
+
 import json
 import os
 from pathlib import Path
@@ -51,36 +54,6 @@ def prepare_image_for_bluesky(image_bytes: bytes) -> bytes:
         quality -= 5
 
     raise ValueError("Unable to compress image below Bluesky size limit.")
-
-BASE_DIR = Path(__file__).resolve().parent
-STATE_FILE = BASE_DIR / "state.json"
-
-
-def load_config() -> dict[str, Any]:
-    """Load configuration and secrets."""
-    load_dotenv(BASE_DIR / ".env")
-
-    with open(BASE_DIR / "config.yaml", "r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-
-    config["mastodon"]["access_token"] = os.environ["MASTODON_TOKEN"]
-    config["bluesky"]["app_password"] = os.environ["BLUESKY_APP_PASSWORD"]
-    return config
-
-
-def load_state() -> dict[str, Any]:
-    """Load the posting state from disk."""
-    if not STATE_FILE.exists():
-        return {"posted_ids": []}
-
-    with open(STATE_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def save_state(state: dict[str, Any]) -> None:
-    """Save the posting state to disk."""
-    with open(STATE_FILE, "w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False, indent=2)
 
 
 def html_to_text(html: str) -> str:
