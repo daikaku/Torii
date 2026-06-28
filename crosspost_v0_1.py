@@ -80,14 +80,23 @@ def get_latest_statuses(config, account_id):
     return r.json()
 
 
-def post_to_bluesky(config, text):
+def post_to_bluesky(config, text, media):
     client = Client()
     client.login(
         config["bluesky"]["handle"],
         config["bluesky"]["app_password"],
     )
-    client.send_post(text)
 
+    if not media:
+        client.send_post(text)
+        return
+
+    image = media[0]
+    image_bytes = download_media(image["url"])
+    client.send_images(
+        text=text,
+        images=[image_bytes],
+    )
 
 def main():
     config = load_config()
@@ -116,7 +125,8 @@ def main():
             text = text[:280] + "\n\n（以下略）"
 
         print(f"Posting to Bluesky: {text}")
-        post_to_bluesky(config, text)
+        media = status.get("media_attachments", [])
+        post_to_bluesky(config, text, media)
 
         state["posted_ids"].append(status_id)
         save_state(state)
