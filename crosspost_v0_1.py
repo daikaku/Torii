@@ -5,7 +5,16 @@ from media import (
     prepare_image_for_bluesky,
     is_video,
 )
-
+from links import (
+    html_to_text,
+    extract_first_url,
+    get_link_metadata,
+    upload_external_thumb,
+)
+from mastodon import (
+    get_own_account_id,
+    get_latest_statuses,
+)
 
 import json
 import os
@@ -21,116 +30,6 @@ from PIL import Image
 import io
 import re
 from typing import Any
-
-
-def html_to_text(html: str) -> str:
-    """Convert Mastodon HTML content into plain text."""
-    soup = BeautifulSoup(html, "html.parser")
-    return soup.get_text("\n").strip()
-
-def extract_first_url(text: str) -> str | None:
-    """Return the first URL found in text."""
-    match = re.search(r"https?://\S+", text)
-    if match:
-        return match.group(0)
-    return None
-
-def get_link_metadata(url: str) -> dict[str, str] | None:
-    """Fetch Open Graph metadata from a URL."""
-
-    try:
-        r = requests.get(
-            url,
-            timeout=10,
-            headers={
-                "User-Agent": "Torii/1.0 (+https://github.com/)"
-            },
-        )
-        r.raise_for_status()
-    except Exception:
-        return None
-
-    soup = BeautifulSoup(r.text, "html.parser")
-
-    def og(name: str) -> str | None:
-        tag = soup.find("meta", property=name)
-        if tag:
-            return tag.get("content")
-        return None
-
-    title = (
-        og("og:title")
-        or (soup.title.string.strip() if soup.title and soup.title.string else "")
-    )
-
-    description = (
-        og("og:description")
-        or ""
-    )
-
-    image = (
-        og("og:image")
-        or ""
-    )
-
-    return {
-        "url": url,
-        "title": title,
-        "description": description,
-        "image": image,
-    }
-
-def upload_external_thumb(
-    client: Client,
-    image_url: str,
-):
-    """Download an OGP image and upload it to Bluesky."""
-
-    if not image_url:
-        return None
-
-    try:
-        image_bytes = download_media(image_url)
-        return client.upload_blob(image_bytes).blob
-    except Exception as e:
-        print(f"Failed to upload OGP image: {e}")
-        return None
-
-
-def get_own_account_id(config: dict[str, Any]) -> str:
-    """Return the authenticated Mastodon account ID."""
-    instance = config["mastodon"]["instance"]
-    token = config["mastodon"]["access_token"]
-
-    r = requests.get(
-        f"{instance}/api/v1/accounts/verify_credentials",
-        headers={"Authorization": f"Bearer {token}"},
-        timeout=30,
-    )
-    r.raise_for_status()
-    return r.json()["id"]
-
-
-def get_latest_statuses(
-    config: dict[str, Any],
-    account_id: str,
-    ) -> list[dict[str, Any]]:
-    """Fetch the latest Mastodon statuses."""
-    instance = config["mastodon"]["instance"]
-    token = config["mastodon"]["access_token"]
-
-    r = requests.get(
-        f"{instance}/api/v1/accounts/{account_id}/statuses",
-        headers={"Authorization": f"Bearer {token}"},
-        params={
-            "limit": 5,
-            "exclude_reblogs": str(not config["options"]["include_boosts"]).lower(),
-            "exclude_replies": str(not config["options"]["include_replies"]).lower(),
-        },
-        timeout=30,
-    )
-    r.raise_for_status()
-    return r.json()
 
 
 def post_to_bluesky(
