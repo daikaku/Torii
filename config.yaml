@@ -1,0 +1,9 @@
+mastodon:
+  instance: "https://fedibird.com"
+
+bluesky:
+  handle: "daikaku.bsky.social"
+
+options:
+  include_replies: false
+  include_boosts: false
