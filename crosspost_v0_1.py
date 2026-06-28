@@ -140,6 +140,22 @@ def get_link_metadata(url: str) -> dict[str, str] | None:
         "image": image,
     }
 
+def upload_external_thumb(
+    client: Client,
+    image_url: str,
+):
+    """Download an OGP image and upload it to Bluesky."""
+
+    if not image_url:
+        return None
+
+    try:
+        image_bytes = download_media(image_url)
+        return client.upload_blob(image_bytes).blob
+    except Exception as e:
+        print(f"Failed to upload OGP image: {e}")
+        return None
+
 def is_video(media: list[dict[str, Any]]) -> bool:
     """Return True if the attachment contains a video."""
     return any(
@@ -192,20 +208,33 @@ def post_to_bluesky(
 ) -> None:
     """Post a status with up to four images to Bluesky."""
 
+    # 画像・動画がない場合
     if not media:
         if metadata:
+            thumb = None
+
+            if metadata.get("image"):
+                thumb = upload_external_thumb(
+                    client,
+                    metadata["image"],
+                )
+
             embed = models.AppBskyEmbedExternal.Main(
                 external=models.AppBskyEmbedExternal.External(
                     uri=metadata["url"],
                     title=metadata["title"],
                     description=metadata["description"],
+                    thumb=thumb,
                 )
             )
+
             client.send_post(text=text, embed=embed)
         else:
-            client.send_post(text)
+            client.send_post(text=text)
+
         return
 
+    # 動画
     if is_video(media):
         video = next(
             attachment
@@ -223,6 +252,7 @@ def post_to_bluesky(
         )
         return
 
+    # 画像
     images = []
     image_alts = []
 
@@ -239,7 +269,7 @@ def post_to_bluesky(
         image_alts.append(image.get("description") or "")
 
     if not images:
-        client.send_post(text)
+        client.send_post(text=text)
         return
 
     client.send_images(
@@ -271,9 +301,14 @@ def main() -> None:
         if status.get("visibility") != "public":
             continue
 
-        text = html_to_text(status["content"])
+        html = status["content"]
 
-        url = extract_first_url(text)
+        text = html_to_text(html)
+        
+        soup = BeautifulSoup(html, "html.parser")
+        link = soup.find("a", href=True)
+
+        url = link["href"] if link else None
         metadata = get_link_metadata(url) if url else None
 
         spoiler = html_to_text(status.get("spoiler_text", ""))
