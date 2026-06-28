@@ -59,7 +59,10 @@ def main() -> None:
 
         # Blueskyは基本300字まで
         if len(text) > 300:
-            text = text[:280] + "\n\n（以下略）"
+            status_url = status.get("url", "")
+            suffix = f"\n\n続きを読む:\n{status_url}"
+            max_text_length = 300 - len(suffix)
+            text = text[:max_text_length] + suffix
 
         print(f"Posting to Bluesky: {text}")
         media = status.get("media_attachments", [])
