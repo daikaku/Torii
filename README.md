@@ -109,3 +109,8 @@ state.py        Duplicate prevention
 ## License
 
 MIT License
+
+## Documentation
+
+- [Installation guide (English)](INSTALL.md)
+- [設置方法（日本語）](INSTALL.ja.md)
