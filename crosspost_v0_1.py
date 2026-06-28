@@ -5,18 +5,22 @@ from pathlib import Path
 import requests
 import yaml
 from bs4 import BeautifulSoup
-from atproto import Client
+from atproto import Client, models
 from dotenv import load_dotenv
 from PIL import Image
 
 import io
+import re
+from typing import Any
 
-def download_media(url):
+def download_media(url: str) -> bytes:
+    """Download media from Mastodon and return its bytes."""
     r = requests.get(url, timeout=30)
     r.raise_for_status()
     return r.content
 
-def prepare_image_for_bluesky(image_bytes):
+def prepare_image_for_bluesky(image_bytes: bytes) -> bytes:
+    """Compress an image to fit within Bluesky's upload size limit."""
     MAX_SIZE = 2_000_000
 
     if len(image_bytes) <= MAX_SIZE:
@@ -52,7 +56,8 @@ BASE_DIR = Path(__file__).resolve().parent
 STATE_FILE = BASE_DIR / "state.json"
 
 
-def load_config():
+def load_config() -> dict[str, Any]:
+    """Load configuration and secrets."""
     load_dotenv(BASE_DIR / ".env")
 
     with open(BASE_DIR / "config.yaml", "r", encoding="utf-8") as f:
@@ -63,7 +68,8 @@ def load_config():
     return config
 
 
-def load_state():
+def load_state() -> dict[str, Any]:
+    """Load the posting state from disk."""
     if not STATE_FILE.exists():
         return {"posted_ids": []}
 
@@ -71,17 +77,78 @@ def load_state():
         return json.load(f)
 
 
-def save_state(state):
+def save_state(state: dict[str, Any]) -> None:
+    """Save the posting state to disk."""
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
 
 
-def html_to_text(html):
+def html_to_text(html: str) -> str:
+    """Convert Mastodon HTML content into plain text."""
     soup = BeautifulSoup(html, "html.parser")
     return soup.get_text("\n").strip()
 
+def extract_first_url(text: str) -> str | None:
+    """Return the first URL found in text."""
+    match = re.search(r"https?://\S+", text)
+    if match:
+        return match.group(0)
+    return None
 
-def get_own_account_id(config):
+def get_link_metadata(url: str) -> dict[str, str] | None:
+    """Fetch Open Graph metadata from a URL."""
+
+    try:
+        r = requests.get(
+            url,
+            timeout=10,
+            headers={
+                "User-Agent": "Torii/1.0 (+https://github.com/)"
+            },
+        )
+        r.raise_for_status()
+    except Exception:
+        return None
+
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    def og(name: str) -> str | None:
+        tag = soup.find("meta", property=name)
+        if tag:
+            return tag.get("content")
+        return None
+
+    title = (
+        og("og:title")
+        or (soup.title.string.strip() if soup.title and soup.title.string else "")
+    )
+
+    description = (
+        og("og:description")
+        or ""
+    )
+
+    image = (
+        og("og:image")
+        or ""
+    )
+
+    return {
+        "url": url,
+        "title": title,
+        "description": description,
+        "image": image,
+    }
+
+def is_video(media: list[dict[str, Any]]) -> bool:
+    """Return True if the attachment contains a video."""
+    return any(
+        attachment.get("type") in ("video", "gifv")
+        for attachment in media
+    )
+
+def get_own_account_id(config: dict[str, Any]) -> str:
+    """Return the authenticated Mastodon account ID."""
     instance = config["mastodon"]["instance"]
     token = config["mastodon"]["access_token"]
 
@@ -94,7 +161,11 @@ def get_own_account_id(config):
     return r.json()["id"]
 
 
-def get_latest_statuses(config, account_id):
+def get_latest_statuses(
+    config: dict[str, Any],
+    account_id: str,
+    ) -> list[dict[str, Any]]:
+    """Fetch the latest Mastodon statuses."""
     instance = config["mastodon"]["instance"]
     token = config["mastodon"]["access_token"]
 
@@ -112,26 +183,60 @@ def get_latest_statuses(config, account_id):
     return r.json()
 
 
-def post_to_bluesky(client, text, media):
+def post_to_bluesky(
+    client: Client,
+    text: str,
+    media: list[dict[str, Any]],
+    url: str | None = None,
+    metadata: dict[str, str] | None = None,
+) -> None:
+    """Post a status with up to four images to Bluesky."""
 
     if not media:
-        client.send_post(text)
+        if metadata:
+            embed = models.AppBskyEmbedExternal.Main(
+                external=models.AppBskyEmbedExternal.External(
+                    uri=metadata["url"],
+                    title=metadata["title"],
+                    description=metadata["description"],
+                )
+            )
+            client.send_post(text=text, embed=embed)
+        else:
+            client.send_post(text)
+        return
+
+    if is_video(media):
+        video = next(
+            attachment
+            for attachment in media
+            if attachment.get("type") in ("video", "gifv")
+        )
+
+        video_bytes = download_media(video["url"])
+        alt = video.get("description") or ""
+
+        client.send_video(
+            text=text,
+            video=video_bytes,
+            video_alt=alt,
+        )
         return
 
     images = []
     image_alts = []
 
     for image in media[:4]:
-    try:
-        image_bytes = prepare_image_for_bluesky(
-            download_media(image["url"])
-        )
-    except Exception as e:
-        print(f"Skipping image: {e}")
-        continue
+        try:
+            image_bytes = prepare_image_for_bluesky(
+                download_media(image["url"])
+            )
+        except Exception as e:
+            print(f"Skipping image: {e}")
+            continue
 
-    images.append(image_bytes)
-    image_alts.append(image.get("description") or "")
+        images.append(image_bytes)
+        image_alts.append(image.get("description") or "")
 
     if not images:
         client.send_post(text)
@@ -143,7 +248,8 @@ def post_to_bluesky(client, text, media):
         image_alts=image_alts,
     )
 
-def main():
+def main() -> None:
+    """Synchronize new Mastodon posts to Bluesky."""
     config = load_config()
     state = load_state()
     client = Client()
@@ -167,6 +273,9 @@ def main():
 
         text = html_to_text(status["content"])
 
+        url = extract_first_url(text)
+        metadata = get_link_metadata(url) if url else None
+
         spoiler = html_to_text(status.get("spoiler_text", ""))
         if spoiler:
             text = f"CW: {spoiler}\n\n{text}"
@@ -180,8 +289,9 @@ def main():
 
         print(f"Posting to Bluesky: {text}")
         media = status.get("media_attachments", [])
-        post_to_bluesky(config, text, media)
-
+        has_video = is_video(media)
+        
+        post_to_bluesky(client, text, media, url, metadata)
         state["posted_ids"].append(status_id)
         save_state(state)
 
