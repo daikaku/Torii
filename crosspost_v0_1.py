@@ -112,31 +112,45 @@ def get_latest_statuses(config, account_id):
     return r.json()
 
 
-def post_to_bluesky(config, text, media):
-    client = Client()
-    client.login(
-        config["bluesky"]["handle"],
-        config["bluesky"]["app_password"],
-    )
+def post_to_bluesky(client, text, media):
 
     if not media:
         client.send_post(text)
         return
 
-    image = media[0]
-    image_bytes = prepare_image_for_bluesky(
-    download_media(image["url"])
-    )
-    alt = image.get("description") or ""
+    images = []
+    image_alts = []
+
+    for image in media[:4]:
+    try:
+        image_bytes = prepare_image_for_bluesky(
+            download_media(image["url"])
+        )
+    except Exception as e:
+        print(f"Skipping image: {e}")
+        continue
+
+    images.append(image_bytes)
+    image_alts.append(image.get("description") or "")
+
+    if not images:
+        client.send_post(text)
+        return
+
     client.send_images(
         text=text,
-        images=[image_bytes],
-        image_alts=[alt],
+        images=images,
+        image_alts=image_alts,
     )
 
 def main():
     config = load_config()
     state = load_state()
+    client = Client()
+    client.login(
+        config["bluesky"]["handle"],
+        config["bluesky"]["app_password"],
+        )
 
     account_id = get_own_account_id(config)
     statuses = get_latest_statuses(config, account_id)
@@ -152,6 +166,10 @@ def main():
             continue
 
         text = html_to_text(status["content"])
+
+        spoiler = html_to_text(status.get("spoiler_text", ""))
+        if spoiler:
+            text = f"CW: {spoiler}\n\n{text}"
 
         if not text:
             continue
