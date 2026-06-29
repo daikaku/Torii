@@ -1,3 +1,0 @@
-  File "/Users/daikaku/Documents/Torii/main.py", line 71
-    print(f"Posting to Bluesky: {text}")
-IndentationError: unexpected indent
