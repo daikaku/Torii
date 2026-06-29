@@ -9,7 +9,7 @@ from media import download_media
 def html_to_text(html: str) -> str:
     """Convert Mastodon HTML content into plain text."""
     soup = BeautifulSoup(html, "html.parser")
-    return soup.get_text("\n").strip()
+    return soup.get_text().strip()
 
 def extract_first_url(text: str) -> str | None:
     """Return the first URL found in text."""
