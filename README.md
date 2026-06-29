@@ -9,6 +9,7 @@ It preserves images, videos, alt text, and external link previews while preventi
 - 🚀 Cross-post public Mastodon posts to Bluesky
 - 🖼️ Support up to 4 images
 - 🎥 Video support
+- 🔗 Clickable URLs in post text
 - 🔗 External URL card support (Open Graph)
 - ♿ Preserve image and video alt text
 - 🔄 Automatic duplicate prevention
@@ -101,8 +102,8 @@ state.py        Duplicate prevention
 
 ## Roadmap
 
+- Image + URL card support
 - Logging improvements
-- Clickable URL facets
 - Misskey support
 - Thread support
 
