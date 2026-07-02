@@ -1,15 +1,30 @@
 import re
 
 import requests
-from atproto import Client
+from atproto import Client, models
 from bs4 import BeautifulSoup
 
 from media import download_media
 
 def html_to_text(html: str) -> str:
     """Convert Mastodon HTML content into plain text."""
+
     soup = BeautifulSoup(html, "html.parser")
-    return soup.get_text().strip()
+
+    # <br> → 改行
+    for br in soup.find_all("br"):
+        br.replace_with("\n")
+
+    # 段落の終わりに空行を入れる
+    for p in soup.find_all("p"):
+        p.append("\n\n")
+
+    text = soup.get_text()
+
+    # 空行が3つ以上続く場合は2つにまとめる
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    return text.strip()
 
 def extract_first_url(text: str) -> str | None:
     """Return the first URL found in text."""
@@ -79,4 +94,24 @@ def upload_external_thumb(
         print(f"Failed to upload OGP image: {e}")
         return None
 
+def build_facets(text: str):
+    """Build Bluesky link facets from URLs in text."""
 
+    facets = []
+
+    for m in re.finditer(r"https?://\S+", text):
+        facets.append(
+            models.AppBskyRichtextFacet.Main(
+                index=models.AppBskyRichtextFacet.ByteSlice(
+                    byte_start=len(text[:m.start()].encode("utf-8")),
+                    byte_end=len(text[:m.end()].encode("utf-8")),
+                ),
+                features=[
+                    models.AppBskyRichtextFacet.Link(
+                        uri=m.group(),
+                    )
+                ],
+            )
+        )
+
+    return facets or None

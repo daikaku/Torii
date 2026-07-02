@@ -2,7 +2,10 @@ from typing import Any
 
 from atproto import Client, models
 
-from links import upload_external_thumb
+from links import (
+    build_facets,
+    upload_external_thumb,
+)
 from media import (
     download_media,
     is_video,
@@ -37,9 +40,16 @@ def post_to_bluesky(
                 )
             )
 
-            client.send_post(text=text, embed=embed)
+            client.send_post(
+                text=text,
+                embed=embed,
+                facets=build_facets(text),
+            )
         else:
-            client.send_post(text=text)
+            client.send_post(
+                text=text,
+                facets=build_facets(text),
+            )
 
         return
 
@@ -78,12 +88,16 @@ def post_to_bluesky(
         image_alts.append(image.get("description") or "")
 
     if not images:
-        client.send_post(text=text)
+        client.send_post(
+        text=text,
+        facets=build_facets(text),
+        )
         return
 
     client.send_images(
         text=text,
         images=images,
         image_alts=image_alts,
+        facets=build_facets(text),
     )
 
