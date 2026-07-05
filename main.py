@@ -16,16 +16,23 @@ from bluesky import post_to_bluesky
 from bs4 import BeautifulSoup
 from atproto import Client
 
+import traceback
 
 def main() -> None:
     """Synchronize new Mastodon posts to Bluesky."""
     config = load_config()
     state = load_state()
     client = Client()
-    client.login(
-        config["bluesky"]["handle"],
-        config["bluesky"]["app_password"],
+
+    try:
+        client.login(
+            config["bluesky"]["handle"],
+            config["bluesky"]["app_password"],
         )
+    except Exception:
+        print("ERROR: Failed to login to Bluesky")
+        traceback.print_exc()
+        return
 
     account_id = get_own_account_id(config)
     statuses = get_latest_statuses(config, account_id)
@@ -66,8 +73,14 @@ def main() -> None:
 
         print(f"Posting to Bluesky: {text}")
         media = status.get("media_attachments", [])
-
-        post_to_bluesky(client, text, media, metadata)
+    
+        try:
+            post_to_bluesky(client, text, media, metadata)
+        except Exception:
+            print("ERROR: Failed to post to Bluesky")
+            traceback.print_exc()
+            continue
+        
         state["posted_ids"].append(status_id)
         save_state(state)
 
